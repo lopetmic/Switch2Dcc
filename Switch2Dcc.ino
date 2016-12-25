@@ -1,15 +1,15 @@
 //#include <MobaTools.h>
 
-/*  Stellpult - Zentrale
- *  
- *  Aufgrund der angeschlossenen Weichenschalter wird ein Dcc-Signal erzeugt
- *  um entsprechende Weichendecoder ansteuern zu können.
- *  Das DCC-Signal wird per Timer2 erzeugt mit fast PWM, Prescaler 32. Pro Bit ist ein Irq notwendig
- *  Der Irq wird per OCRB in der Mitte eines Bits ausgelöst und setzt die Timerwerte für das nächste Bit.
- *  
+/* ##################### Stellpult - Zentrale  ##############################
+  
+   Aufgrund der angeschlossenen Weichenschalter wird ein Dcc-Signal erzeugt
+   um entsprechende Weichendecoder ansteuern zu können.
+   Das DCC-Signal wird per Timer2 erzeugt mit fast PWM, Prescaler 32. Pro Bit ist ein Irq notwendig.
+   Der Irq wird per OCRB in der Mitte eines Bits ausgelöst und setzt die Timerwerte für das nächste Bit.
+   
 */
 
-//########################### Definitionen ##################################
+// ########################### Definitionen ##################################
 
 #define WEICHEN_VERSION_ID 02
 
@@ -139,9 +139,11 @@ void loop() {
   DebugPrint( "\n\r----------\n\r");
    
   // Telegramm Wiederholungen verwalten
+  // Für alle Puffer
   for ( i=0; i <= DCC_BUF_SIZE; i++ ) {
+      // wenn der Puffer bereits gesendet wurde, dann
       if ( arU8_DCC_BufState[i] == BUF_SENT ) {
-          // Puffer wurde gesendet, wiederholen oder freigeben
+          // Puffer wiederholen oder freigeben
           DebugPrint( "Buffer[%d] gesendet, RepCnt=%d\n\r", i ,arU8_DCC_BufDataRep[i] );
           if ( arU8_DCC_BufDataRep[i] > 1 ) {
               // Telegramm erneut senden
@@ -159,92 +161,153 @@ void loop() {
 //###################### Ende Loop Arduino     ##############################
 //###########################################################################
 
-//###################### mtGetSwitch           ##############################
-// liest die Position eines Schalters der Matrix und liefert diesen zurück
-// Input:  Index des Schalters, der gelesen werden soll
-// Output: Position der gelesenen Weiche
-//###########################################################################
+/* ##################### mtGetSwitch           ##############################
+ liest die Position eines Schalters der Matrix und liefert diesen zurück
+ Input:  Index des Schalters, der gelesen werden soll
+ Output: Position der gelesenen Weiche
+*/
 uint8_t mtGetSwitch(uint8_t U8_WeicheIdx) {
     digitalWrite( arU8_WeicheRowsP[U8_WeicheIdx], LOW );
     uint8_t U8_WeichePsn =  digitalRead( arU8_WeicheColsP[U8_WeicheIdx]);
     digitalWrite( arU8_WeicheRowsP[U8_WeicheIdx], HIGH );
     return U8_WeichePsn;
 }
-//###########################################################################
 
-//###################### mtCreateTelegram      ##############################
-// Es wird ein Weichentelegramm für die übergebene Weichennummer erzeugt.
-// Input1: Index der Weiche, für die ein Telegramm erzeugt werden soll
-// Input2: aktuelle Stellung der Weiche
-// Output: Funktionswert ist der Puffer oder -1 wenn kein freier Puffer vorhanden ist
-//###########################################################################
-int8_t mtCreateTelegram( int turnoutNo, byte direction ) {
+/* ###################### DCC Zubehörbefehle   ##############################
 
-    byte bufIx, bufNo, chksum;
-    int dccAddr;
+ siehe auch: http://www.opendcc.de/info/dcc/dcc.html
+
+ Zubehör kann mit zwei verschiedenen Befehlen angesprochen werden, 
+ dem 'einfachen' (=basic) und das 'erweiterte' (=extended) Format.
+ 
+ hier wird das einfache Format verwendet und beschrieben:
+
+ Das einfache Format benutzt zwei Bytes zur Kodierung:
+   Format  10AAAAAA 0 1AAADAAC 0 [XOR]
+   AAAAAAAA  bezeichnet die Adresse, hier haben sich aufgrund der historischen Entwicklung bestimmte Besonderheiten ergeben
+   D kennzeichnet den 'Aktivierungszustand', also ob der Ausgang ein- oder ausgeschaltet wird.
+   C kennzeichnet die Spule. (Coil)
+ Der Befehl lehnt sich eng an die ersten 4-fach Weichenantriebe mit paarweisen Spulen an. 
+ Deshalb ist die Auswahl des Spulenpaares in den Bits 2 und 1 des zweiten Bytes. 
+ Welche Spule aktiviert wird, legt das Bit C fest, somit bilden die letzten drei Bits (AAC) die eigentliche Ausgangsadresse. 
+ C = 0 soll dabei Weiche auf Abzweig bzw. Signal auf Halt kennzeichnen. 
+ D = 1 bedeutet Spule (oder Ausgang) einschalten, D = 0 bedeutet ausschalten.
+
+ Beispiel:
+   Preamble       Startbit  Adressbyte  Startbit  Datenbyte  Startbit  Prüfsumme  Stopbit
+   11111111111111 0         10AAAAAA    0         1AAA1BBR   0         [xor]      1
+
+   Dabei bedeutet im Adressbyte AAAAAA [A5 .. A0] und im Datenbyte AAA [A8 .. A6], wobei die Adressen A8 bis A6 invertiert übertragen werden. 
+   BB ist die lokale Adresse am Decoder (0,1,2,3).
+   R ist das Outputbit, d.h. welche Spule aktiviert werden soll. 
+
+ Aus den übermittelten Adressen wird wie folgt das DCC-Telegramm zusammengebaut:
+   Adressbyte = 0x80 + (adresse & 0x3F);
+   Datenbyte  = 0x80 + (adresse / 0x40) ^ 0x07) * 0x10;
+   Prüfsumme  = Adressbyte ^ Datenbyte;
+
+ Hinweise:
+   Die Adressbits sind über den Befehl verteilt, in der CV-Übersicht gibt es eine Grafik, welche den Zusammenhang erläutert (http://www.opendcc.de/info/decoder/dcc_cv.html)
+   Man beachte die Invertierung der mittleren Bits. 
+   Die Dekoderadresse 0 soll nicht benutzt werden, die erste zu benutzende Adresse ist also die Adresse 4: 10000001 0 1111D00C 0 [XOR]. 
+   Diese soll von Bediengeräten als '1' dargestellt werden.
+
+ Notaus
+   Ein Zubehörbefehl mit allen Adressbit = 1 (Spulenadresse jedoch 0, Spule deaktiviert) 
+   Also Adresse 2047, Codierung 10111111 0 10000110 0 [XOR] bedeutet Notaus.
+
+ Hier wird das wie folgt abgebildet:
+ Die übergebene Adresse wird ab 1 gezählt. In der Ausgabeeinheit wird das auf die obigen Bits abgebildet, also Dekoderadresse, Ausgangspaar und zu aktivierende Spule bestimmt. 
+*/
+/* ##################### mtCreateTelegram      ##############################
+ Es wird ein Weichentelegramm für die übergebene Weichennummer erzeugt.
+ Input1: Index der Weiche, für die ein Telegramm erzeugt werden soll
+ Input2: aktuelle Stellung der Weiche
+ Output: Funktionswert ist der Puffer oder -1 wenn kein freier Puffer vorhanden ist
+*/
+int8_t mtCreateTelegram( uint8_t U8_WeicheAddr, uint8_t U8_WeichePsn ) {
+
+    uint8_t U8_DCC_BufDataIdx;
+    uint8_t U8_DCC_BufIdx;
+    uint8_t U8_DCC_ChkSum;
+    uint16_t U16_DCC_Addr;
+    
     // Weichenadressen zählen ab 1, die DCC Adressierung ab 0
     // Standardmässig werden die ersten 4 Adressen nicht verwendet, d.h
-    // Weichenadresse 1 -> dccadresse 4
-    dccAddr=  turnoutNo > 0 ? turnoutNo+3 : 4 ;
-    for ( bufNo = 0; bufNo <= 1; bufNo++ ) {
-        // freien Puffer suchen
-        if ( arU8_DCC_BufState[bufNo] == BUF_IDLE ) break;
-    }
-    if ( bufNo > 1 ) return -1; // kein freierPuffer, abbrechen >>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-    arU8_DCC_BufState[bufNo] = BUF_WRITE;
-    arU8_DCC_BufDataRep[bufNo] = MAX_REPEATS; // Weichentelegramme MAX_REPEATS x wiederholen
-    bufIx = 0;
-    chksum = 0;
-    // dcc-Adressbyte bestimmen
-    // 1. Byte is b10xxxxxx , wobei x die Bits 7-2 der Weichenadresse sind
-    arU8_DCC_Buf[bufNo][bufIx] = 0b10000000 | ( (dccAddr>>2) & 0b00111111);
-    chksum ^= arU8_DCC_Buf[bufNo][bufIx++];
-    // 2. Byte setzt sich zusammen aus der High-Adresse, den untersten 2 Bits der Weichenadresse
-    // und der Spulenadresse
-    arU8_DCC_Buf[bufNo][bufIx] =  0b10000000 |
-                                  ((((dccAddr>>8) & 0x07 ) ^0xff) << 4 ) |
-                                  ( 1 << 3 ) |
-                                  (( dccAddr & 0x03 ) << 1 ) |
-                                  ( direction & 0x01 );
-    chksum ^= arU8_DCC_Buf[bufNo][bufIx++];
-    arU8_DCC_Buf[bufNo][bufIx++] = chksum;
-    arU8_DCC_BufDataLen[bufNo] = bufIx;
-    arU8_DCC_BufState[bufNo] = BUF_WAIT;
-    DebugPrint( "DCCBuf[%d]: Weiche=%d, DccAdr=%d, Rep:%d Data: %x:%x:%x\n\r", bufNo, turnoutNo, dccAddr, arU8_DCC_BufDataRep[bufNo],arU8_DCC_Buf[bufNo][0],arU8_DCC_Buf[bufNo][1],arU8_DCC_Buf[bufNo][2]);
-    return bufNo;
-}
-//###########################################################################
+    // Weichenadresse 1 -> DCC Adresse 4
+    U16_DCC_Addr =  U8_WeicheAddr > 0 ? U8_WeicheAddr + 3 : 4 ;
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////   
-// Unterprogramme für Timer 2
+    // freien Puffer suchen
+    for ( U8_DCC_BufIdx = 0; U8_DCC_BufIdx < DCC_BUF_SIZE; U8_DCC_BufIdx++ ) {
+        if ( arU8_DCC_BufState[U8_DCC_BufIdx] == BUF_IDLE ) break;
+    }
+    if ( U8_DCC_BufIdx < DCC_BUF_SIZE ) {
+
+        // Buffer Verwaltungsdaten initialisieren
+        arU8_DCC_BufState[U8_DCC_BufIdx] = BUF_WRITE;
+        arU8_DCC_BufDataRep[U8_DCC_BufIdx] = MAX_REPEATS; // Weichentelegramme MAX_REPEATS x wiederholen
+        U8_DCC_BufDataIdx = 0;
+        U8_DCC_ChkSum = 0;
+    
+        // DCC-Adressbyte bestimmen
+        // 1. Byte ist b10xxxxxx , wobei x die Bits 7-2 der Weichenadresse sind
+        arU8_DCC_Buf[U8_DCC_BufIdx][U8_DCC_BufDataIdx] = 0b10000000 | ( (U16_DCC_Addr >> 2) & 0b00111111);
+        U8_DCC_ChkSum ^= arU8_DCC_Buf[U8_DCC_BufIdx][U8_DCC_BufDataIdx++];
+    
+        // 2. Byte setzt sich zusammen aus der High-Adresse, den untersten 2 Bits der Weichenadresse
+        // und der Spulenadresse
+        arU8_DCC_Buf[U8_DCC_BufIdx][U8_DCC_BufDataIdx] =  0b10000000 |
+                                  ((((U16_DCC_Addr >> 8) & 0x07 ) ^ 0xff) << 4 ) |
+                                  ( 1 << 3 ) |
+                                  (( U16_DCC_Addr & 0x03 ) << 1 ) |
+                                  ( U8_WeichePsn & 0x01 );
+        U8_DCC_ChkSum ^= arU8_DCC_Buf[U8_DCC_BufIdx][U8_DCC_BufDataIdx++];
+    
+        arU8_DCC_Buf[U8_DCC_BufIdx][U8_DCC_BufDataIdx++] = U8_DCC_ChkSum;
+        arU8_DCC_BufDataLen[U8_DCC_BufIdx] = U8_DCC_BufDataIdx;
+        arU8_DCC_BufState[U8_DCC_BufIdx] = BUF_WAIT;
+    
+        DebugPrint( "DCCBuf[%d]: Weiche=%d, DccAdr=%d, Rep:%d Data: %x:%x:%x\n\r", U8_DCC_BufIdx, U8_WeicheAddr, U16_DCC_Addr, arU8_DCC_BufDataRep[U8_DCC_BufIdx],arU8_DCC_Buf[U8_DCC_BufIdx][0],arU8_DCC_Buf[U8_DCC_BufIdx][1],arU8_DCC_Buf[U8_DCC_BufIdx][2]);
+    } else {
+        U8_DCC_BufIdx = -1;
+        DebugPrint( "kein freierPuffer, abbrechen >>>>>>>>>>>>>>>>>>>>>>>>>>>>>" );
+    }
+    return U8_DCC_BufIdx;
+}
+
+//###################### Timer 2 Handling      ##############################
+
+//###################### Definitionen          ##############################
 #define BIT0_LEN  (232/2)  // Bitlength in Timer2-Ticks
 #define BIT1_LEN  (116/2)
-#define SET_BIT0 {OCR2A = BIT0_LEN-1; OCR2B = BIT0_LEN/2-1;}
-#define SET_BIT1 {OCR2A = BIT1_LEN-1; OCR2B = BIT1_LEN/2-1;}
+#define SET_BIT0 {OCR2A = BIT0_LEN - 1; OCR2B = BIT0_LEN / 2 - 1;}
+#define SET_BIT1 {OCR2A = BIT1_LEN - 1; OCR2B = BIT1_LEN / 2 - 1;}
 
+//###################### Timer 2 init           ##############################
 void InitTimer2(void) {
-    // Timer 2 initiieren:
     // fast PWM  mit Top = OCR2A;
     // Ausgangssignal OCR2B ist aktiv
     // Prescaler = 32 (=2µs / Takt)
     SET_BIT1;
-    TCCR2A = (1<<COM2B1 )  // COM2B1:0 = 1/0: Clear OC2B on Compare Match, set OC2B at BOTTOM
-           | (0<<COM2B0 )    
-           | (1<< WGM21 )
-           | (1<< WGM20 ); // WGM22:0 = 1/1/1: FastPWM, OCRA=Top
-    TCCR2B = (1<< WGM22 )
-           | (0<< CS22  )
-           | (1<< CS21  )
-           | (1<< CS20  ); // CS22:0 = 0/1/1 clk/32 from prescaler
-
-
-    TIMSK2 = (1<<OCIE2B );  // Interrupt on OCRB match
-    // DCC-Signal initiieren
+    TCCR2A = (1 << COM2B1 )  // COM2B1:0 = 1/0: Clear OC2B on Compare Match, set OC2B at BOTTOM
+           | (0 << COM2B0 )    
+           | (1 << WGM21 )
+           | (1 << WGM20 );  // WGM22:0 = 1/1/1: FastPWM, OCRA=Top
+    TCCR2B = (1 << WGM22 )
+           | (0 << CS22  )
+           | (1 << CS21  )
+           | (1 << CS20  );  // CS22:0 = 0/1/1 clk/32 from prescaler
+    TIMSK2 = (1 << OCIE2B ); // Interrupt on OCRB match
+    
+    // DCC-Signal initialisieren
     U8_DCC_State = DCC_PREAMBLE;
     U8_PreambleBitCnt = 0;
+
+    // DDC Output initialisieren
     pinMode( 3, OUTPUT ); // OCR2B gibt auf D3 aus;
 }
 
+//###################### Timer 2 interrupt service ##############################
 ISR ( TIMER2_COMPB_vect) {
     static byte bitCount;        // Bitzähler (zeigt auf das aktuell ausgegebene Bit )
     static byte byteCount;       // Bytezähler im aktuellen Paket
@@ -253,7 +316,8 @@ ISR ( TIMER2_COMPB_vect) {
     
     byte temp;
     // Set OCRA / OCRB for the next Bit
-    static const byte bitMsk[] = {0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80};
+    static const byte bitMsk[] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80};
+    
     switch ( U8_DCC_State ) {
       case DCC_PREAMBLE : 
         // In der Preamble werden nur 1-Bits ausgegeben (keine Änderung von

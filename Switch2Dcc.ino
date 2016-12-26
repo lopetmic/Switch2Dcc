@@ -41,8 +41,6 @@ uint8_t U8_DCC_State;           // Status der Ausgabe
 // der ISR ausgegeben wird, kann der andere gefüllt werden
 #define DCC_BUF_SIZE 2
 uint8_t arU8_DCC_Buf[DCC_BUF_SIZE][10];    // Datenpuffer, incl Prüfsumme
-// uint8_t U8_DCC_BufWrtIdx;    // Schreibindex ( es kann immer nur in einen Puffer geschrieben werden )
-int8_t U8_DCC_BufSndIdx;        // Puffer der gerade per ISR ausgegeben wird (=< 0, wenn keine Ausgabe aktiv ist)
 uint8_t arU8_DCC_BufState[DCC_BUF_SIZE];   // aktueller Pufferstatus
 #define BUF_IDLE  0             // Puffer inaktiv
 #define BUF_WRITE 1             // Puffer wird gerade mit Daten beschrieben
@@ -50,11 +48,11 @@ uint8_t arU8_DCC_BufState[DCC_BUF_SIZE];   // aktueller Pufferstatus
 #define BUF_OUT   3             // Puffer wird auf DCC-Ausgang geschrieben
 #define BUF_SENT  4             // Puffer wurde komplett auf dcc ausgegeben
 uint8_t arU8_DCC_BufDataLen[DCC_BUF_SIZE]; // atuelle Datenlänge (incl. Prüfsumme)
-uint8_t arU8_DCC_BufDataRep[DCC_BUF_SIZE]; // Wiederholungen bei der ausgabe
+uint8_t arU8_DCC_BufDataRep[DCC_BUF_SIZE]; // Wiederholungen bei der Ausgabe
 #define MAX_REPEATS 2
 
 // Variablen für die ISR-Routine zur DCC-Ausgabe
-#define PREAMBLE_BIT_MIN 14
+#define PREAMBLE_BIT_MIN 16
 uint8_t U8_PreambleBitCnt;
 uint8_t arU8_DCC_PacketIdle[] = { 0xff, 0x00, 0xff }; 
 // Idle packet. Wird immer ausgegeben, wenn am Ende der Preamble kein Ausgabepuffer bereit steht.
@@ -197,13 +195,13 @@ uint8_t mtGetSwitch(uint8_t U8_WeicheIdx) {
    Preamble       Startbit  Adressbyte  Startbit  Datenbyte  Startbit  Prüfsumme  Stopbit
    11111111111111 0         10AAAAAA    0         1AAA1BBR   0         [xor]      1
 
-   Dabei bedeutet im Adressbyte AAAAAA [A5 .. A0] und im Datenbyte AAA [A8 .. A6], wobei die Adressen A8 bis A6 invertiert übertragen werden. 
-   BB ist die lokale Adresse am Decoder (0,1,2,3).
+   Dabei bedeutet im Adressbyte AAAAAA [A7 .. A2] und im Datenbyte AAA [A10 .. A8], wobei die Adressen A10 bis A8 invertiert übertragen werden. 
+   BB [A1 .. A0] ist die lokale Adresse am Decoder (0,1,2,3).
    R ist das Outputbit, d.h. welche Spule aktiviert werden soll. 
 
  Aus den übermittelten Adressen wird wie folgt das DCC-Telegramm zusammengebaut:
-   Adressbyte = 0x80 + (adresse & 0x3F);
-   Datenbyte  = 0x80 + (adresse / 0x40) ^ 0x07) * 0x10;
+   Adressbyte = 0x80 + ((adresse >> 2) & 0x3F);
+   Datenbyte  = 0x80 + (adresse >> 8) ^ 0x07) * 0x10;
    Prüfsumme  = Adressbyte ^ Datenbyte;
 
  Hinweise:
@@ -251,19 +249,22 @@ int8_t mtCreateTelegram( uint8_t U8_WeicheAddr, uint8_t U8_WeichePsn ) {
     
         // DCC-Adressbyte bestimmen
         // 1. Byte ist b10xxxxxx , wobei x die Bits 7-2 der Weichenadresse sind
-        arU8_DCC_Buf[U8_DCC_BufIdx][U8_DCC_BufDataIdx] = 0b10000000 | ( (U16_DCC_Addr >> 2) & 0b00111111);
+        arU8_DCC_Buf[U8_DCC_BufIdx][U8_DCC_BufDataIdx] = 0x80 + ((U16_DCC_Addr >> 2 ) & 0b00111111 );
         U8_DCC_ChkSum ^= arU8_DCC_Buf[U8_DCC_BufIdx][U8_DCC_BufDataIdx++];
     
-        // 2. Byte setzt sich zusammen aus der High-Adresse, den untersten 2 Bits der Weichenadresse
-        // und der Spulenadresse
-        arU8_DCC_Buf[U8_DCC_BufIdx][U8_DCC_BufDataIdx] =  0b10000000 |
-                                  ((((U16_DCC_Addr >> 8) & 0x07 ) ^ 0xff) << 4 ) |
+        // DCC-Datenbyte setzt sich zusammen aus der High-Adresse, den untersten 2 Bits der Weichenadresse
+        // und der Spulenadresse (Richtung)
+        arU8_DCC_Buf[U8_DCC_BufIdx][U8_DCC_BufDataIdx] =  0x80 |
+                                  ((((U16_DCC_Addr >> 8) & 0x07 ) ^ 0x07 ) << 4 ) |
                                   ( 1 << 3 ) |
                                   (( U16_DCC_Addr & 0x03 ) << 1 ) |
                                   ( U8_WeichePsn & 0x01 );
         U8_DCC_ChkSum ^= arU8_DCC_Buf[U8_DCC_BufIdx][U8_DCC_BufDataIdx++];
-    
+
+        // DCC Checksum in Puffer
         arU8_DCC_Buf[U8_DCC_BufIdx][U8_DCC_BufDataIdx++] = U8_DCC_ChkSum;
+
+        // Puffer VErwaltungsdaten aktualisieren
         arU8_DCC_BufDataLen[U8_DCC_BufIdx] = U8_DCC_BufDataIdx;
         arU8_DCC_BufState[U8_DCC_BufIdx] = BUF_WAIT;
     
@@ -278,8 +279,8 @@ int8_t mtCreateTelegram( uint8_t U8_WeicheAddr, uint8_t U8_WeichePsn ) {
 //###################### Timer 2 Handling      ##############################
 
 //###################### Definitionen          ##############################
-#define BIT0_LEN  (232/2)  // Bitlength in Timer2-Ticks
-#define BIT1_LEN  (116/2)
+#define BIT0_LEN  (232 / 2)  // Bitlength in Timer2-Ticks
+#define BIT1_LEN  (116 / 2)
 #define SET_BIT0 {OCR2A = BIT0_LEN - 1; OCR2B = BIT0_LEN / 2 - 1;}
 #define SET_BIT1 {OCR2A = BIT1_LEN - 1; OCR2B = BIT1_LEN / 2 - 1;}
 
@@ -288,7 +289,7 @@ void InitTimer2(void) {
     // fast PWM  mit Top = OCR2A;
     // Ausgangssignal OCR2B ist aktiv
     // Prescaler = 32 (=2µs / Takt)
-    SET_BIT1;
+    SET_BIT1;                // Ausgabe von 1 Bits für die Preamble
     TCCR2A = (1 << COM2B1 )  // COM2B1:0 = 1/0: Clear OC2B on Compare Match, set OC2B at BOTTOM
            | (0 << COM2B0 )    
            | (1 << WGM21 )
@@ -309,14 +310,15 @@ void InitTimer2(void) {
 
 //###################### Timer 2 interrupt service ##############################
 ISR ( TIMER2_COMPB_vect) {
-    static byte bitCount;        // Bitzähler (zeigt auf das aktuell ausgegebene Bit )
-    static byte byteCount;       // Bytezähler im aktuellen Paket
-    static byte *packetBufPtr;   // Zeiger auf das aktuell auszugebende DCC-Paket
-    static byte sendIdle;        // Es wird das Idle-Packet gesendet
+    static uint8_t U8_BitCount;        // Bitzähler (zeigt auf das aktuell ausgegebene Bit )
+    static uint8_t U8_ByteCount;       // Bytezähler im aktuellen Paket
+    static uint8_t *ptrU8_PacketBuf;   // Zeiger auf das aktuell auszugebende DCC-Paket
+    static int8_t U8_DCC_BufSndIdx;        // Puffer der gerade per ISR ausgegeben wird (=< 0, wenn keine Ausgabe aktiv ist)
     
-    byte temp;
+    uint8_t U8_DCC_BufWait;
+    uint8_t U8_DCC_BufIdx;
     // Set OCRA / OCRB for the next Bit
-    static const byte bitMsk[] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80};
+    static const uint8_t arU8_bitMsk[] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80};
     
     switch ( U8_DCC_State ) {
       case DCC_PREAMBLE : 
@@ -325,26 +327,34 @@ ISR ( TIMER2_COMPB_vect) {
         // wird nicht auf neues Paket geprüft
         SET_TP1;
         if ( U8_PreambleBitCnt++ > PREAMBLE_BIT_MIN ) {
-            SET_BIT0; //Startbit ausgeben
-            bitCount = 8;
-            U8_DCC_State = DCC_DATA;
+            SET_BIT0; // Startbit ausgeben
+            U8_BitCount = 8;
             // prüfen ob neues Telegramm auszugeben ist.
-            if ( arU8_DCC_BufState[0] == BUF_WAIT || arU8_DCC_BufState[1] == BUF_WAIT ) {
+            U8_DCC_BufWait = 0;
+            for ( U8_DCC_BufIdx = 0; U8_DCC_BufIdx < DCC_BUF_SIZE; U8_DCC_BufIdx++ ) {
+                if ( arU8_DCC_BufState[U8_DCC_BufIdx] == BUF_WAIT ) {
+                    U8_DCC_BufWait = U8_DCC_BufWait + arU8_bitMsk[U8_DCC_BufIdx];
+                }
+            }
+            if ( U8_DCC_BufWait > 0 ) {
                 // es wartet ein Telegramm auf Ausgabe, Datenpointer setzen
                 // drauf achten, dass die Puffer gewechselt werden ( wenn beide auf
                 // 'WAIT' stehen
-                sendIdle = false;
-                temp = U8_DCC_BufSndIdx;
-                U8_DCC_BufSndIdx = U8_DCC_BufSndIdx == 0 ? 1 : 0;
-                if ( arU8_DCC_BufState[U8_DCC_BufSndIdx] != BUF_WAIT ) U8_DCC_BufSndIdx = temp;
-                byteCount = arU8_DCC_BufDataLen[U8_DCC_BufSndIdx];
-                packetBufPtr = &arU8_DCC_Buf[U8_DCC_BufSndIdx][0];
+                U8_DCC_State = DCC_DATA;
+                if ( U8_DCC_BufWait > 2 ) {
+                    U8_DCC_BufSndIdx = U8_DCC_BufSndIdx == 0 ? 1 : 0;
+                } else {
+                    U8_DCC_BufSndIdx = U8_DCC_BufWait - 1;
+                }
+                U8_ByteCount = arU8_DCC_BufDataLen[U8_DCC_BufSndIdx];
+                ptrU8_PacketBuf = &arU8_DCC_Buf[U8_DCC_BufSndIdx][0];
                 arU8_DCC_BufState[U8_DCC_BufSndIdx] = BUF_OUT;
             } else {
                 // kein Telegramm auszugeben, Idle-Telegramm senden
-                packetBufPtr = arU8_DCC_PacketIdle;
-                byteCount = sizeof(arU8_DCC_PacketIdle);
-                sendIdle = true;
+                U8_DCC_State = DCC_IDLE;
+                U8_DCC_BufSndIdx = -1;
+                ptrU8_PacketBuf = arU8_DCC_PacketIdle;
+                U8_ByteCount = sizeof(arU8_DCC_PacketIdle);
             }
         }
         CLR_TP1;
@@ -352,29 +362,29 @@ ISR ( TIMER2_COMPB_vect) {
       case DCC_DATA:
       case DCC_IDLE:
         // Datenbits ausgeben
-        if ( bitCount == 0 ) {
+        if ( U8_BitCount == 0 ) {
           SET_TP2;
           // Byte ist komplett ausgegeben, Stopbit ausgeben
-          if ( byteCount == 1) {
+          if ( U8_ByteCount == 1) {
             SET_TP3;
             // war letztes Byte, 1 ausgeben und auf Preamble schalten
             SET_BIT1;
-            if ( U8_DCC_State == DCC_DATA && !sendIdle )arU8_DCC_BufState[U8_DCC_BufSndIdx] = BUF_SENT; 
+            if ( U8_DCC_State == DCC_DATA ) arU8_DCC_BufState[U8_DCC_BufSndIdx] = BUF_SENT; 
             U8_DCC_State = DCC_PREAMBLE;
             U8_PreambleBitCnt = 0;
             CLR_TP3;
           } else {
             // Stopbit ausgeben und auf nächstes Byte schalten
             SET_BIT0;
-            bitCount = 8;
-            packetBufPtr++;
-            byteCount--;
+            U8_BitCount = 8;
+            ptrU8_PacketBuf++;
+            U8_ByteCount--;
            }
         CLR_TP2;
         } else {
           SET_TP4;
           // Datenbit ausgeben
-          if ( *packetBufPtr & bitMsk[--bitCount] ){
+          if ( *ptrU8_PacketBuf & arU8_bitMsk[--U8_BitCount] ){
             SET_BIT1;
           } else {
             SET_BIT0;

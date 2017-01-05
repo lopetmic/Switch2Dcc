@@ -1,9 +1,9 @@
-//#include <MobaTools.h>
-
 /* ##################### Stellpult - Zentrale  ##############################
   
-   Aufgrund der angeschlossenen Weichenschalter wird ein Dcc-Signal erzeugt
+   Aufgrund der angeschlossenen Weichenschalter wird ein Dcc-Signal erzeugt,
    um entsprechende Weichendecoder ansteuern zu können.
+   Die Weichensahalter sind diodenentkoppelte Ein/Aus Schalter, die in einer Matrix angeordnet werden.
+   Die MAtrix kann durch Wahl der Pins frei konfiguriert werden.
    Das DCC-Signal wird per Timer2 erzeugt mit fast PWM, Prescaler 32. Pro Bit ist ein Irq notwendig.
    Der Irq wird per OCRB in der Mitte eines Bits ausgelöst und setzt die Timerwerte für das nächste Bit.
    
@@ -11,17 +11,21 @@
 
 // ########################### Definitionen ##################################
 
-#define WEICHEN_VERSION_ID 02
+const uint8_t U8_Version_Switch2DCC = 3;   // basiert auf Switch2DCC Veriosn 3 von Franz-Peter Müller
 
-// Schaltermatrix
-// Bitcodierte Schalter ( max 4x4 oder 4x8 = 16/32 Schalter )
-// je nachdem ob die _Schalterbits in einem int(16Bit) oder long(32Bit) gespeichert werden
-// Matrix-Input (Col): Pin 4-7 
-// Matrix Output(Row): Pin 8-11
-// Adressen der zu schaltenden Weichen und Row/Column des zugehörinen Schalters (Matrix)
-const uint8_t arU8_WeicheAddr[]    = { 1, 2, 3, 4,   5, 6, 7, 8,   9, 10, 11, 12,  13, 14, 15, 16 };
-const uint8_t arU8_WeicheColsP[]   = { 4, 5, 6, 7,   4, 5, 6, 7,   4,  5,  6,  7,   4,  5,  6,  7 };
-const uint8_t arU8_WeicheRowsP[]   = { 8, 8, 8, 8,   9, 9, 9, 9,  10, 10, 10, 10,  11, 11, 11, 11 };
+/* Schaltermatrix
+   Schaltermatrix - für die Matrix können beliebige Ports verwendet werden
+   Matrix-Input (Col):  Die verwendeten Ports werden in weicheColsP festgelegt
+   Matrix Output(Row):  Die verwendeten Ports werden in weicheRowsP festgelegt
+   Adressen der zu schaltenden Weichen und Row/Column des zugehörigen Schalters (Matrix)
+   Schalter können durch mehrfache Angabe der Reihe/Spalte Telegramme für mehrere Adressen erzeugen.
+   Dies ist hilfreich, wenn Aktionen in mehreren Decodern oder bei mehreren Zubehörteilen nötig sind.
+
+*/
+const uint8_t arU8_WeicheColsP[]   = { 4,  4,  4,  4, 4, 4,  4,  5,  5,  5,  5,  5,  5,  5,  5,  6,  6,  6 };
+const uint8_t arU8_WeicheRowsP[]   = {11, 10, 10,  9, 9, 8,  8, 11, 11, 11, 10, 10,  9,  9,  8, 11, 10,  9 };
+const uint8_t arU8_WeicheAddr[]    = { 5,  6,  7,  2, 3, 1,  4,  8, 14, 22,  9, 11, 10, 12, 13, 19, 17, 18 };
+const uint8_t arU8_WeicheDir[]     = { 0,  0,  0,  0, 0, 1,  1,  0,  0,  0,  0,  1,  1,  0,  1,  0,  1,  0 };
 
 // Weichenstatus
 // für jede Weiche wird der Status in einem Byte hinterlegt
@@ -49,7 +53,8 @@ uint8_t arU8_DCC_BufState[DCC_BUF_SIZE];   // aktueller Pufferstatus
 #define BUF_SENT  4             // Puffer wurde komplett auf dcc ausgegeben
 uint8_t arU8_DCC_BufDataLen[DCC_BUF_SIZE]; // atuelle Datenlänge (incl. Prüfsumme)
 uint8_t arU8_DCC_BufDataRep[DCC_BUF_SIZE]; // Wiederholungen bei der Ausgabe
-#define MAX_REPEATS 2
+#define MAX_REPEATS 4
+//#define ROCOADDR 1              // auskommentieren für Standard NMRA Adressing
 
 // Variablen für die ISR-Routine zur DCC-Ausgabe
 #define PREAMBLE_BIT_MIN 16
@@ -68,7 +73,7 @@ uint8_t arU8_DCC_PacketIdle[] = { 0xff, 0x00, 0xff };
 //###################### SetUp Arduino         ##############################
 void setup() {
   #ifdef debug
-  Serial.begin( 115200 );
+    Serial.begin( 115200 );
   #endif
   
   // Ports für das Einlesen der Schalter initiieren ( Matrix )
@@ -154,7 +159,7 @@ void loop() {
   }
   DebugPrint( "\n\r----------\n\r");
   
-  delay(5);
+  delay(20);
 }
 //###################### Ende Loop Arduino     ##############################
 //###########################################################################
@@ -168,7 +173,8 @@ uint8_t mtGetSwitch(uint8_t U8_WeicheIdx) {
     digitalWrite( arU8_WeicheRowsP[U8_WeicheIdx], LOW );
     uint8_t U8_WeichePsn =  digitalRead( arU8_WeicheColsP[U8_WeicheIdx]);
     digitalWrite( arU8_WeicheRowsP[U8_WeicheIdx], HIGH );
-    return U8_WeichePsn;
+    U8_WeichePsn = U8_WeichePsn ^ arU8_WeicheDir[U8_WeicheIdx];     // Schalterorientierung
+return U8_WeichePsn;
 }
 
 /* ###################### DCC Zubehörbefehle   ##############################
@@ -233,7 +239,12 @@ int8_t mtCreateTelegram( uint8_t U8_WeicheAddr, uint8_t U8_WeichePsn ) {
     // Weichenadressen zählen ab 1, die DCC Adressierung ab 0
     // Standardmässig werden die ersten 4 Adressen nicht verwendet, d.h
     // Weichenadresse 1 -> DCC Adresse 4
+    // Bei Roco-Addressing: Weichenadresse 1 -> dccadresse 0
+    #ifdef ROCOADDR
+    U16_DCC_Addr = U8_WeicheAddr > 0 ? U8_WeicheAddr - 1 : 1 ;
+    #else
     U16_DCC_Addr =  U8_WeicheAddr > 0 ? U8_WeicheAddr + 3 : 4 ;
+    #endif  
 
     // freien Puffer suchen
     for ( U8_DCC_BufIdx = 0; U8_DCC_BufIdx < DCC_BUF_SIZE; U8_DCC_BufIdx++ ) {

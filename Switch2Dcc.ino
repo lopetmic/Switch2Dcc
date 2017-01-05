@@ -11,7 +11,7 @@
 
 // ########################### Definitionen ##################################
 
-const uint8_t U8_Version_Switch2DCC = 3;   // basiert auf Switch2DCC Veriosn 3 von Franz-Peter Müller
+const uint8_t U8_Version_Switch2DCC = 4;   // basiert auf Switch2DCC Veriosn 3 von Franz-Peter Müller
 
 /* Schaltermatrix
    Schaltermatrix - für die Matrix können beliebige Ports verwendet werden
@@ -22,10 +22,16 @@ const uint8_t U8_Version_Switch2DCC = 3;   // basiert auf Switch2DCC Veriosn 3 v
    Dies ist hilfreich, wenn Aktionen in mehreren Decodern oder bei mehreren Zubehörteilen nötig sind.
 
 */
-const uint8_t arU8_WeicheColsP[]   = { 4,  4,  4,  4, 4, 4,  4,  5,  5,  5,  5,  5,  5,  5,  5,  6,  6,  6 };
-const uint8_t arU8_WeicheRowsP[]   = {11, 10, 10,  9, 9, 8,  8, 11, 11, 11, 10, 10,  9,  9,  8, 11, 10,  9 };
-const uint8_t arU8_WeicheAddr[]    = { 5,  6,  7,  2, 3, 1,  4,  8, 14, 22,  9, 11, 10, 12, 13, 19, 17, 18 };
-const uint8_t arU8_WeicheDir[]     = { 0,  0,  0,  0, 0, 1,  1,  0,  0,  0,  0,  1,  1,  0,  1,  0,  1,  0 };
+const uint8_t arU8_WeicheColsP[]   = { 4,  4,  4,  4,  4,  4,  5,  5,  5,  5,  5,  5,  6,  6,  6,  6,  6,  6,  7,  7,  7,  7,  7,  7,  8,  8,  8,  8,  8,  8 };
+const uint8_t arU8_WeicheRowsP[]   = { 9, 10, 11, 12, 14, 15,  9, 10, 11, 12, 14, 15,  9, 10, 11, 12, 14, 15,  9, 10, 11, 12, 14, 15,  9, 10, 11, 12, 14, 15 };
+const uint8_t arU8_WeicheAddr[]    = { 1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30 };
+const uint8_t arU8_WeicheDir[]     = { 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0 };
+
+/* Doku für Schwarzenberg:
+   bisher generisches Mapping für eine 5x6 Matrix
+   Reihen auf Pins D4 - D8
+   Spalten auf Pins D9 - D12, A0, A1         
+ */
 
 // Weichenstatus
 // für jede Weiche wird der Status in einem Byte hinterlegt

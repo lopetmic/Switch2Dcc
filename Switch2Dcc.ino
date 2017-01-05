@@ -20,7 +20,7 @@
 // Matrix Output(Row): Pin 8-11
 // Adressen der zu schaltenden Weichen und Row/Column des zugehörinen Schalters (Matrix)
 const uint8_t arU8_WeicheAddr[]    = { 1, 2, 3, 4,   5, 6, 7, 8,   9, 10, 11, 12,  13, 14, 15, 16 };
-const uint8_t arU8_WeicheColsP[]   = { 4, 5, 6, 7,   4, 5, 6, 5,   4,  5,  6,  7,   4,  5,  6,  7 };
+const uint8_t arU8_WeicheColsP[]   = { 4, 5, 6, 7,   4, 5, 6, 7,   4,  5,  6,  7,   4,  5,  6,  7 };
 const uint8_t arU8_WeicheRowsP[]   = { 8, 8, 8, 8,   9, 9, 9, 9,  10, 10, 10, 10,  11, 11, 11, 11 };
 
 // Weichenstatus
@@ -287,17 +287,17 @@ int8_t mtCreateTelegram( uint8_t U8_WeicheAddr, uint8_t U8_WeichePsn ) {
 //###################### Timer 2 init           ##############################
 void InitTimer2(void) {
     // fast PWM  mit Top = OCR2A;
-    // Ausgangssignal OCR2B ist aktiv
+    // Ausgangssignal Output Compare Register OCR2B ist aktiv
     // Prescaler = 32 (=2µs / Takt)
     SET_BIT1;                // Ausgabe von 1 Bits für die Preamble
-    TCCR2A = (1 << COM2B1 )  // COM2B1:0 = 1/0: Clear OC2B on Compare Match, set OC2B at BOTTOM
+    TCCR2A = (1 << COM2B1 )  // Compare Match Output B Mode COM2B1:0 = 1/0: Clear OC2B on Compare Match, set OC2B at BOTTOM
            | (0 << COM2B0 )    
            | (1 << WGM21 )
-           | (1 << WGM20 );  // WGM22:0 = 1/1/1: FastPWM, OCRA=Top
+           | (1 << WGM20 );  // Waveform Generation Mode WGM22:0 = 1/1/1: FastPWM, OCRA=Top
     TCCR2B = (1 << WGM22 )
            | (0 << CS22  )
            | (1 << CS21  )
-           | (1 << CS20  );  // CS22:0 = 0/1/1 clk/32 from prescaler
+           | (1 << CS20  );  // Clock Select CS22:0 = 0/1/1 clk/32 from prescaler
     TIMSK2 = (1 << OCIE2B ); // Interrupt on OCRB match
     
     // DCC-Signal initialisieren

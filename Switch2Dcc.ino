@@ -34,7 +34,7 @@ const uint8_t U8_Version_Switch2DCC = 4;   // basiert auf Switch2DCC Veriosn 3 v
 const uint8_t arU8_WeicheColsP[]   = { 4,  4,  4,  4,  4,  4,  4,  4,  4,  5,   5,  5,  5,  5,  5,  5,  5,  5,  5,  6,  6,  6,  6,  6,  6,  6,  6,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  8,  8,  8,  8,  8,  8 };
 const uint8_t arU8_WeicheRowsP[]   = { 9,  9,  9, 10, 10, 11, 12, 14, 15,  9,  10, 11, 12, 14, 15, 14, 15, 14, 15,  9, 10, 11, 12, 14, 15, 14, 15,  9, 10, 11, 12, 14, 15, 14, 15, 14, 15,  9, 10, 11, 12, 14, 15 };
 const uint8_t arU8_WeicheAddr[]    = { 1,  9, 17,  0,  0,  3,  4,  5,  5,  7,  10, 18,  0,  6,  6, 11, 11, 19, 19, 25, 26,  0,  0, 12, 12, 20, 20,  2, 14, 22,  0,  8,  8, 13, 13, 21, 21,  0,  0,  0,  0, 27, 27 };
-const uint8_t arU8_WeicheDir[]     = { 0,  0,  0,  0,  0,  0,  0,  2,  2,  0,   0,  0,  0,  2,  3,  2,  3,  2,  3,  0,  0,  0,  0,  2,  3,  2,  3,  0,  0,  0,  0,  2,  3,  2,  3,  2,  3,  0,  0,  0,  0,  2,  3 };
+const uint8_t arU8_WeicheDir[]     = { 1,  1,  1,  1,  1,  1,  1,  3,  3,  1,   1,  1,  1,  3,  2,  3,  2,  3,  2,  1,  1,  1,  1,  3,  2,  3,  2,  1,  1,  1,  1,  3,  2,  3,  2,  3,  2,  1,  1,  1,  1,  3,  2 };
 #define DIRMSK  1
 #define OFFMSK  2
 const int16_t arI16_BlockAddr[]    = { 0,  0,  0, -3, -4,  0,  0,  0,  0,  0,   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0 };
@@ -152,6 +152,7 @@ uint8_t arU8_DCC_PacketIdle[] = { 0xff, 0x00, 0xff };
 // Debug-Ports
 #define debug
 #include "debugports.cpp"
+//#define debug_block
 
 //###################### Ende der Definitionen ##############################
 //###########################################################################
@@ -165,21 +166,22 @@ void setup() {
   DebugPrint( "\n\r---------- Begin of setup ----------\n\r");
 
   // setup of arU8_BlockIdx[]
-  DebugPrint( "\n\rBlock Indizes: ");
-  for ( uint8_t i = 0; i < sizeof(arI16_BlockAddr); i++ ) {
+  DebugPrint( "\n\rBlock Indizes:             ");
+  for ( uint8_t i = 0; i < ( sizeof(arI16_BlockAddr) / 2 ); i++ ) {
+    arU8_BlockIdx[i] = 0;
     if (arI16_BlockAddr[i] != 0) {
-      arU8_BlockIdx[i] = 0;
-      for ( uint8_t j = 0; j < sizeof(arU8_WeicheAddr); j++ ) {
+     for ( uint8_t j = 0; j < sizeof(arU8_WeicheAddr); j++ ) {
         if (abs(arI16_BlockAddr[i]) == arU8_WeicheAddr[j]) {
           arU8_BlockIdx[i] = j;
         }
       }
     }
     DebugPrint( "%d, ", arU8_BlockIdx[i] );
+    // init des Weichenstatus auf 0
+    arU8_WeicheState[i] = 0;
   }
 
   // Ports für das Einlesen der Schalter initiieren ( Matrix )
-  DebugPrint( "IniSwitches: " );
 
   // in arU8_WeicheRowsP stehen die Outputports der Matrix
   for ( uint8_t i = 0; i < sizeof(arU8_WeicheRowsP); i++ ) {
@@ -194,14 +196,14 @@ void setup() {
 
   // Schalter einlesen und alle auf 'geaendert' stellen, so dass beim Programmstart
   // die entsprechenden Weichenbefehle ausgegeben werden.
-  DebugPrint( "\n\rWeichen Status roh: ");
+  DebugPrint( "\n\rWeichen Status roh:        ");
   for ( uint8_t i = 0; i < sizeof(arU8_WeicheState); i++ ) {
-    arU8_WeicheState[i] = mtGetSwitch(i);
+    arU8_WeicheState[i] |= (mtGetSwitch(i) & POSMSK );
     // Telegrammbit setzen, wenn Adresse es erfordert
     if (arU8_WeicheAddr[i] != 0 ) {
       arU8_WeicheState[i] |= TELMSK;
     }
-    DebugPrint( "%d, ", arU8_WeicheState[i] & 1 );
+    DebugPrint( "%d, ", arU8_WeicheState[i] );
   }
 
   // Verriegelungen in arU8_WeicheState setzen. Dies darf erst geschehen,
@@ -209,7 +211,7 @@ void setup() {
   DebugPrint( "\n\rWeichen Status verriegelt: ");
   for ( uint8_t i = 0; i < sizeof(arU8_WeicheState); i++ ) {
     mtSetBlock( i, arU8_WeicheState[i] & POSMSK );
-    DebugPrint( "%d, ", arU8_WeicheState[i] & 1 );
+    DebugPrint( "%d, ", arU8_WeicheState[i] );
   }
 
   InitTimer2();
@@ -248,7 +250,7 @@ void loop() {
       DebugPrint( "Index: %d, Adresse %d, Status: %d\n\r", i, arU8_WeicheAddr[i], arU8_WeicheState[i] );
     }
   }
-  DebugPrint( "\n\r----------\n\r");
+  //DebugPrint( "\n\r----------\n\r");
 
   // für geänderte Weichen jeweils ein Telegramm erzeugen
   for (uint8_t i = 0; i < sizeof( arU8_WeicheState ); i++ ) {
@@ -277,7 +279,7 @@ void loop() {
       }
     }
   }
-  DebugPrint( "\n\r----------\n\r");
+  //DebugPrint( "\n\r----------\n\r");
 
   // Telegramm Wiederholungen verwalten
   // Für alle Puffer
@@ -297,7 +299,7 @@ void loop() {
   }
   DebugPrint( "\n\r----------\n\r");
 
-  delay(20);
+  delay(200);
 }
 //###################### Ende Loop Arduino     ##############################
 //###########################################################################
@@ -325,15 +327,27 @@ void mtSetBlock(uint8_t U8_BlockSwIdx, uint8_t BlockSwPsn) {
   if (arI16_BlockAddr[U8_BlockSwIdx] > 0) { // es gibt eine Verriegelungsbeziehung
     if (BlockSwPsn > 0) {      // Verriegeln
       arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]] |= BLKMSK;
+      #ifdef debug_block
+        DebugPrint( "\n\rBlock detected due to switch %d: blocked %d, state %d \n\r", U8_BlockSwIdx, arU8_BlockIdx[U8_BlockSwIdx], arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]]);
+      #endif
     } else {                    // Freigeben
       arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]] &= (~BLKMSK);
+      #ifdef debug_block
+        DebugPrint( "\n\rRelease detected due to switch %d: released %d, state %d \n\r", U8_BlockSwIdx, arU8_BlockIdx[U8_BlockSwIdx], arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]]);
+      #endif
     }
   } else {
     if (arI16_BlockAddr[U8_BlockSwIdx] < 0) { // es existiert eine Freigabebeziehung
       if (BlockSwPsn == 0) {      // Verriegeln
         arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]] |= BLKMSK;
+        #ifdef debug_block
+          DebugPrint( "\n\rBlock detected due to switch %d: blocked %d, state %d \n\r", U8_BlockSwIdx, arU8_BlockIdx[U8_BlockSwIdx], arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]]);
+        #endif
       } else {                    // Freigeben
         arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]] &= (~BLKMSK);
+        #ifdef debug_block
+          DebugPrint( "\n\rRelease detected due to switch %d: released %d, state %d \n\r", U8_BlockSwIdx, arU8_BlockIdx[U8_BlockSwIdx], arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]]);
+        #endif
       }
     }
   }

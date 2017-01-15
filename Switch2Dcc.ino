@@ -37,7 +37,7 @@ const uint8_t arU8_WeicheAddr[]    = { 1,  9, 17,  0,  0,  3,  4,  5,  5,  7,  1
 const uint8_t arU8_WeicheDir[]     = { 1,  1,  1,  1,  1,  1,  1,  3,  3,  1,   1,  1,  1,  3,  2,  3,  2,  3,  2,  1,  1,  1,  1,  3,  2,  3,  2,  1,  1,  1,  1,  3,  2,  3,  2,  3,  2,  1,  1,  1,  1,  3,  2 };
 #define DIRMSK  1
 #define OFFMSK  2
-const int16_t arI16_BlockAddr[]    = { 0,  0,  0, -3, -4,  0,  0,  0,  0,  0,   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0 };
+const int16_t arI16_BlockAddr[]    = { 0,  0,  0, -3, -4,  -4,  0,  0,  0,  0,   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0 };
 uint8_t arU8_BlockIdx[sizeof(arI16_BlockAddr)];
 
 /* Doku für Schwarzenberg:
@@ -152,7 +152,7 @@ uint8_t arU8_DCC_PacketIdle[] = { 0xff, 0x00, 0xff };
 // Debug-Ports
 #define debug
 #include "debugports.cpp"
-//#define debug_block
+#define debug_block
 
 //###################### Ende der Definitionen ##############################
 //###########################################################################
@@ -170,7 +170,7 @@ void setup() {
   for ( uint8_t i = 0; i < ( sizeof(arI16_BlockAddr) / 2 ); i++ ) {
     arU8_BlockIdx[i] = 0;
     if (arI16_BlockAddr[i] != 0) {
-     for ( uint8_t j = 0; j < sizeof(arU8_WeicheAddr); j++ ) {
+      for ( uint8_t j = 0; j < sizeof(arU8_WeicheAddr); j++ ) {
         if (abs(arI16_BlockAddr[i]) == arU8_WeicheAddr[j]) {
           arU8_BlockIdx[i] = j;
         }
@@ -221,7 +221,7 @@ void setup() {
   MODE_TP4;
   MODE_TP3;
 
-  DebugPrint( "\n\r---------- End of setup ----------\n\r");
+  DebugPrint( "\n\r----- End of setup -----\n\r");
 
 }
 //###################### Ende SetUp Arduino    ##############################
@@ -238,19 +238,19 @@ void loop() {
     mtSetBlock( i, U8_SwitchPsn );
     // wenn Schalterstellung != Weichenstatus, dann
     if ( U8_SwitchPsn != (arU8_WeicheState[i] & POSMSK) ) {
-      // Prüfen ob Weiche geblockt
+      // neuen Status setzen
+      arU8_WeicheState[i] = ( arU8_WeicheState[i] & 0xFE ) + ( U8_SwitchPsn & POSMSK );
+      // Prüfen ob Weiche nicht geblockt
       if ( (arU8_WeicheState[i] & BLKMSK) == false ) {
-        // neuen Status setzen
-        arU8_WeicheState[i] = U8_SwitchPsn;
         // Telegrammbit setzen, wenn Adresse es erfordert
         if (arU8_WeicheAddr[i] != 0 ) {
           arU8_WeicheState[i] |= TELMSK;
         }
       }
-      DebugPrint( "Index: %d, Adresse %d, Status: %d\n\r", i, arU8_WeicheAddr[i], arU8_WeicheState[i] );
+      DebugPrint( "Switch Position changed: Index: %d, Adresse %d, Status: %d\n\r", i, arU8_WeicheAddr[i], arU8_WeicheState[i] );
     }
   }
-  //DebugPrint( "\n\r----------\n\r");
+  DebugPrint( "\n\r----- reading finished -----\n\r");
 
   // für geänderte Weichen jeweils ein Telegramm erzeugen
   for (uint8_t i = 0; i < sizeof( arU8_WeicheState ); i++ ) {
@@ -271,7 +271,7 @@ void loop() {
         U8_WeicheCoil = arU8_WeicheState[i] & POSMSK;
         U8_WeicheAct = 1;
       }
-      DebugPrint( "Index: %d, Adresse: %d, Pos: %d, Act: %d\n\r", i, arU8_WeicheAddr[i], U8_WeicheCoil, U8_WeicheAct );
+      DebugPrint( "Creating DCC Telegram for Index: %d, Adresse: %d, Pos: %d, Act: %d --> ", i, arU8_WeicheAddr[i], U8_WeicheCoil, U8_WeicheAct );
       // Weichentelegramm erzeugen und wenn erfolgreich, dann
       if ( mtCreateTelegram( arU8_WeicheAddr[i], U8_WeicheCoil, U8_WeicheAct ) >= 0 ) {
         // Telegrammbit löschen
@@ -299,7 +299,7 @@ void loop() {
   }
   DebugPrint( "\n\r----------\n\r");
 
-  delay(200);
+  delay(1200);
 }
 //###################### Ende Loop Arduino     ##############################
 //###########################################################################
@@ -324,30 +324,35 @@ uint8_t mtGetSwitch(uint8_t U8_WeicheIdx) {
   Input 2: Position der Schalters
 */
 void mtSetBlock(uint8_t U8_BlockSwIdx, uint8_t BlockSwPsn) {
-  if (arI16_BlockAddr[U8_BlockSwIdx] > 0) { // es gibt eine Verriegelungsbeziehung
-    if (BlockSwPsn > 0) {      // Verriegeln
-      arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]] |= BLKMSK;
-      #ifdef debug_block
-        DebugPrint( "\n\rBlock detected due to switch %d: blocked %d, state %d \n\r", U8_BlockSwIdx, arU8_BlockIdx[U8_BlockSwIdx], arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]]);
-      #endif
-    } else {                    // Freigeben
-      arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]] &= (~BLKMSK);
-      #ifdef debug_block
-        DebugPrint( "\n\rRelease detected due to switch %d: released %d, state %d \n\r", U8_BlockSwIdx, arU8_BlockIdx[U8_BlockSwIdx], arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]]);
-      #endif
-    }
-  } else {
-    if (arI16_BlockAddr[U8_BlockSwIdx] < 0) { // es existiert eine Freigabebeziehung
-      if (BlockSwPsn == 0) {      // Verriegeln
+  // Verriegelungen nur bearbeiten, wenn der Schalter selbst freigegeben ist
+  if ( ( arU8_WeicheState[U8_BlockSwIdx] & BLKMSK ) == 0 ) {
+    if (arI16_BlockAddr[U8_BlockSwIdx] > 0) { // es gibt eine Verriegelungsbeziehung
+      if (BlockSwPsn > 0) {      // Verriegeln
         arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]] |= BLKMSK;
+        arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]] &= (~TELMSK);
         #ifdef debug_block
-          DebugPrint( "\n\rBlock detected due to switch %d: blocked %d, state %d \n\r", U8_BlockSwIdx, arU8_BlockIdx[U8_BlockSwIdx], arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]]);
+        DebugPrint( "\n\rBlock detected due to switch %d: blocked %d, state %d \n\r", U8_BlockSwIdx, arU8_BlockIdx[U8_BlockSwIdx], arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]]);
         #endif
       } else {                    // Freigeben
         arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]] &= (~BLKMSK);
         #ifdef debug_block
-          DebugPrint( "\n\rRelease detected due to switch %d: released %d, state %d \n\r", U8_BlockSwIdx, arU8_BlockIdx[U8_BlockSwIdx], arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]]);
+        DebugPrint( "\n\rRelease detected due to switch %d: released %d, state %d \n\r", U8_BlockSwIdx, arU8_BlockIdx[U8_BlockSwIdx], arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]]);
         #endif
+      }
+    } else {
+      if (arI16_BlockAddr[U8_BlockSwIdx] < 0) { // es existiert eine Freigabebeziehung
+        if (BlockSwPsn == 0) {      // Verriegeln
+          arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]] |= BLKMSK;
+          arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]] &= (~TELMSK);
+          #ifdef debug_block
+          DebugPrint( "\n\rBlock detected due to switch %d: blocked %d, state %d \n\r", U8_BlockSwIdx, arU8_BlockIdx[U8_BlockSwIdx], arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]]);
+          #endif
+        } else {                    // Freigeben
+          arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]] &= (~BLKMSK);
+          #ifdef debug_block
+          DebugPrint( "\n\rRelease detected due to switch %d: released %d, state %d \n\r", U8_BlockSwIdx, arU8_BlockIdx[U8_BlockSwIdx], arU8_WeicheState[arU8_BlockIdx[U8_BlockSwIdx]]);
+          #endif
+        }
       }
     }
   }
@@ -459,12 +464,12 @@ int8_t mtCreateTelegram( uint8_t U8_WeicheAddr, uint8_t U8_WeicheCoil, uint8_t U
       DebugPrint( "DCCBuf[%d]: Weiche=%d, DccAdr=%d, Rep:%d Data: %x:%x:%x\n\r", U8_DCC_BufIdx, U8_WeicheAddr, U16_DCC_Addr, arU8_DCC_BufDataRep[U8_DCC_BufIdx], arU8_DCC_Buf[U8_DCC_BufIdx][0], arU8_DCC_Buf[U8_DCC_BufIdx][1], arU8_DCC_Buf[U8_DCC_BufIdx][2]);
     } else {
       U8_DCC_BufIdx = -1;
-      DebugPrint( "kein freierPuffer, abbrechen >>>>>>>>>>>>>>>>>>>>>>>>>>>>>" );
+      DebugPrint( "kein freierPuffer, abbrechen >>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n\r" );
     }
   } else {
     // in der Konfiguration ist eine 0 eingetragen (Reserveschalter oder Logik)
     U8_DCC_BufIdx = -2;
-    DebugPrint( "keine Adresse zugewiesen (Leerschalter), abbrechen >>>>>>>" );
+    DebugPrint( "keine Adresse zugewiesen (Leerschalter), abbrechen >>>>>>>\n\r" );
   }
 
   return U8_DCC_BufIdx;

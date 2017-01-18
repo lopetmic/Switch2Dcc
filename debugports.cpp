@@ -26,9 +26,9 @@
         #define SET_TP4 
         #define CLR_TP4 
     #elif defined(__AVR_ATmega328P__) 
-        #define MODE_TP1 DDRC |= (1<<1) //A1
-        #define SET_TP1 PORTC |= (1<<1)
-        #define CLR_TP1 PORTC &= ~(1<<1)
+        #define MODE_TP1 DDRC |= (1<<5) //A5 (As A1 is needed in Project)
+        #define SET_TP1 PORTC |= (1<<5)
+        #define CLR_TP1 PORTC &= ~(1<<5)
         #define MODE_TP2 DDRC |= (1<<2) // A2
         #define SET_TP2 PORTC |= (1<<2)
         #define CLR_TP2 PORTC &= ~(1<<2)

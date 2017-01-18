@@ -37,7 +37,7 @@ const uint8_t arU8_WeicheAddr[]    = { 1,  9, 17,  0,  0,  3,  4,  5,  5,  7,  1
 const uint8_t arU8_WeicheDir[]     = { 1,  1,  1,  1,  1,  1,  1,  3,  3,  1,   1,  1,  1,  3,  2,  3,  2,  3,  2,  1,  1,  1,  1,  3,  2,  3,  2,  1,  1,  1,  1,  3,  2,  3,  2,  3,  2,  1,  1,  1,  1,  3,  2 };
 #define DIRMSK  1
 #define OFFMSK  2
-const int16_t arI16_BlockAddr[]    = { 0,  0,  0, -3, -4,  -4,  0,  0,  0,  0,   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0 };
+const int16_t arI16_BlockAddr[]    = { 0,  0,  0, -3, -4, -4,  0,  0,  0,  0,   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0 };
 uint8_t arU8_BlockIdx[sizeof(arI16_BlockAddr)];
 
 /* Doku für Schwarzenberg:
@@ -152,7 +152,7 @@ uint8_t arU8_DCC_PacketIdle[] = { 0xff, 0x00, 0xff };
 // Debug-Ports
 #define debug
 #include "debugports.cpp"
-#define debug_block
+// #define debug_block
 
 //###################### Ende der Definitionen ##############################
 //###########################################################################
@@ -214,6 +214,8 @@ void setup() {
     DebugPrint( "%d, ", arU8_WeicheState[i] );
   }
 
+  pinMode( 13, OUTPUT );
+  digitalWrite(  13, LOW );
   InitTimer2();
 
   MODE_TP1;
@@ -250,7 +252,7 @@ void loop() {
       DebugPrint( "Switch Position changed: Index: %d, Adresse %d, Status: %d\n\r", i, arU8_WeicheAddr[i], arU8_WeicheState[i] );
     }
   }
-  DebugPrint( "\n\r----- reading finished -----\n\r");
+  DebugPrint( "----- reading finished -----\n\r");
 
   // für geänderte Weichen jeweils ein Telegramm erzeugen
   for (uint8_t i = 0; i < sizeof( arU8_WeicheState ); i++ ) {
@@ -279,7 +281,7 @@ void loop() {
       }
     }
   }
-  //DebugPrint( "\n\r----------\n\r");
+  //DebugPrint( "----------\n\r");
 
   // Telegramm Wiederholungen verwalten
   // Für alle Puffer
@@ -297,9 +299,9 @@ void loop() {
       }
     }
   }
-  DebugPrint( "\n\r----------\n\r");
+  DebugPrint( "----------\n\r");
 
-  delay(1200);
+  delay(20);
 }
 //###################### Ende Loop Arduino     ##############################
 //###########################################################################
@@ -311,7 +313,7 @@ void loop() {
 */
 uint8_t mtGetSwitch(uint8_t U8_WeicheIdx) {
   digitalWrite( arU8_WeicheRowsP[U8_WeicheIdx], LOW );
-  uint8_t U8_SwitchPsn =  digitalRead( arU8_WeicheColsP[U8_WeicheIdx]);
+  uint8_t U8_SwitchPsn = digitalRead( arU8_WeicheColsP[U8_WeicheIdx] );
   digitalWrite( arU8_WeicheRowsP[U8_WeicheIdx], HIGH );
   U8_SwitchPsn = U8_SwitchPsn ^ ( arU8_WeicheDir[U8_WeicheIdx] & DIRMSK );     // Schalterorientierung
   return U8_SwitchPsn;
@@ -548,12 +550,14 @@ ISR ( TIMER2_COMPB_vect) {
           U8_ByteCount = arU8_DCC_BufDataLen[U8_DCC_BufSndIdx];
           ptrU8_PacketBuf = &arU8_DCC_Buf[U8_DCC_BufSndIdx][0];
           arU8_DCC_BufState[U8_DCC_BufSndIdx] = BUF_OUT;
+          digitalWrite(  13, LOW );
         } else {
           // kein Telegramm auszugeben, Idle-Telegramm senden
           U8_DCC_State = DCC_IDLE;
           U8_DCC_BufSndIdx = -1;
           ptrU8_PacketBuf = arU8_DCC_PacketIdle;
           U8_ByteCount = sizeof(arU8_DCC_PacketIdle);
+          digitalWrite(  13, HIGH );
         }
       }
       CLR_TP1;

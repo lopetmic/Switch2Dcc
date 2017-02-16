@@ -34,9 +34,10 @@ const uint8_t U8_Version_Switch2DCC = 4;   // basiert auf Switch2DCC Veriosn 3 v
 const uint8_t arU8_WeicheColsP[]   = { 4,  4,  4,  4,  4,  4,  4,  4,  4,  5,   5,  5,  5,  5,  5,  5,  5,  5,  5,  6,  6,  6,  6,  6,  6,  6,  6,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  8,  8,  8,  8,  8,  8 };
 const uint8_t arU8_WeicheRowsP[]   = { 9,  9,  9, 10, 10, 11, 12, 14, 15,  9,  10, 11, 12, 14, 15, 14, 15, 14, 15,  9, 10, 11, 12, 14, 15, 14, 15,  9, 10, 11, 12, 14, 15, 14, 15, 14, 15,  9, 10, 11, 12, 14, 15 };
 const uint8_t arU8_WeicheAddr[]    = { 1,  9, 17,  0,  0,  3,  4,  5,  5,  7,  10, 18,  0,  6,  6, 11, 11, 19, 19, 25, 26,  0,  0, 12, 12, 20, 20,  2, 14, 22,  0,  8,  8, 13, 13, 21, 21,  0,  0,  0,  0, 27, 27 };
-const uint8_t arU8_WeicheDir[]     = { 1,  1,  1,  1,  1,  1,  1,  3,  3,  1,   1,  1,  1,  3,  2,  3,  2,  3,  2,  1,  1,  1,  1,  3,  2,  3,  2,  1,  1,  1,  1,  3,  2,  3,  2,  3,  2,  1,  1,  1,  1,  3,  2 };
+const uint8_t arU8_WeicheDir[]     = { 1,  1,  1,  1,  1,  1,  1,  7,  3,  1,   1,  1,  1,  7,  3,  7,  3,  7,  3,  1,  1,  1,  1,  7,  3,  7,  3,  1,  1,  1,  1,  7,  3,  7,  3,  7,  3,  1,  1,  1,  1,  7,  3 };
 #define DIRMSK  1
 #define OFFMSK  2
+#define COILMSK 4
 const int16_t arI16_BlockAddr[]    = { 0,  0,  0, -3, -4, -4,  0,  0,  0,  0,   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0 };
 uint8_t arU8_BlockIdx[sizeof(arI16_BlockAddr)];
 
@@ -139,7 +140,7 @@ uint8_t arU8_DCC_BufState[DCC_BUF_SIZE];   // aktueller Pufferstatus
 #define BUF_SENT  4             // Puffer wurde komplett auf dcc ausgegeben
 uint8_t arU8_DCC_BufDataLen[DCC_BUF_SIZE]; // atuelle Datenlänge (incl. Prüfsumme)
 uint8_t arU8_DCC_BufDataRep[DCC_BUF_SIZE]; // Wiederholungen bei der Ausgabe
-#define MAX_REPEATS 4
+#define MAX_REPEATS 2
 //#define ROCOADDR 1             // auskommentieren für Standard NMRA Adressing
 
 // Variablen für die ISR-Routine zur DCC-Ausgabe
@@ -223,6 +224,8 @@ void setup() {
   MODE_TP4;
   MODE_TP3;
 
+  delay (2000);
+
   DebugPrint( "\n\r----- End of setup -----\n\r");
 
 }
@@ -252,7 +255,7 @@ void loop() {
       DebugPrint( "Switch Position changed: Index: %d, Adresse %d, Status: %d\n\r", i, arU8_WeicheAddr[i], arU8_WeicheState[i] );
     }
   }
-  DebugPrint( "----- reading finished -----\n\r");
+  //DebugPrint( "----- reading finished -----\n\r");
 
   // für geänderte Weichen jeweils ein Telegramm erzeugen
   for (uint8_t i = 0; i < sizeof( arU8_WeicheState ); i++ ) {
@@ -264,10 +267,10 @@ void loop() {
       if ( ( arU8_WeicheDir[i] & OFFMSK ) > 0 ) {
         // es werden getrennte Spulen auf einer Adresse angesteuert
         // Spulennummer entspricht der DIR Maske
-        U8_WeicheCoil = arU8_WeicheDir[i] & DIRMSK;
+        U8_WeicheCoil = ( arU8_WeicheDir[i] & COILMSK ) >> (COILMSK / 2);
         // Aktivitätslevel aus Weichenposition bestimmen
         // imkl. Rückrechnen einer möglichgen Schalterinvertierung
-        U8_WeicheAct = ( arU8_WeicheState[i] & POSMSK ) ^ ( arU8_WeicheDir[i] & DIRMSK );
+        U8_WeicheAct = ( arU8_WeicheState[i] & POSMSK );
       } else {
         // es wird eine Spule oder Servo angesteuert
         U8_WeicheCoil = arU8_WeicheState[i] & POSMSK;
@@ -299,9 +302,9 @@ void loop() {
       }
     }
   }
-  DebugPrint( "----------\n\r");
+  //DebugPrint( "----------\n\r");
 
-  delay(20);
+  delay(5);
 }
 //###################### Ende Loop Arduino     ##############################
 //###########################################################################

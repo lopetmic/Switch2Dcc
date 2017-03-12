@@ -39,7 +39,7 @@ const uint8_t arU8_WeicheDir[]     = { 1,  1,  1,  1,  1,  1,  1,  7,  3,  1,   
 #define OFFMSK  2
 #define COILMSK 4
 const int16_t arI16_BlockAddr[]    = { 0,  0,  0, -3, -4, -4,  0,  0,  0,  0,   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0 };
-uint8_t arU8_BlockIdx[sizeof(arI16_BlockAddr)];
+uint8_t arU8_BlockIdx[sizeof(arI16_BlockAddr) / 2];
 
 /* Doku für Schwarzenberg:
    Nr: R/S  Fkt
@@ -87,7 +87,7 @@ uint8_t arU8_BlockIdx[sizeof(arI16_BlockAddr)];
      2 10 Weiche Feldbahn Modul 2
      2 11 Fahrstrom Feldbahn Strecke hinten
      2 12 Fahrstrom Feldbahn Strecke Mitte
-     2 13 Feldbahn Strecke vorne
+     2 13 Fahrstrom Feldbahn Strecke vorne
      2 14 Licht 2
      2 15 frei
      2 16 frei
@@ -252,7 +252,7 @@ void loop() {
           arU8_WeicheState[i] |= TELMSK;
         }
       }
-      DebugPrint( "Switch Position changed: Index: %d, Adresse %d, Status: %d\n\r", i, arU8_WeicheAddr[i], arU8_WeicheState[i] );
+      DBprintStatus(i);
     }
   }
   //DebugPrint( "----- reading finished -----\n\r");
@@ -601,3 +601,34 @@ ISR ( TIMER2_COMPB_vect) {
 
 }
 
+
+/* ##################### DBprintStatus         ##############################
+  gibt den aktuellen Status des Stellpults auf der Debugschnittstelle aus
+  Input:  Index des Schalters, der geändert wurde
+  Output: keiner
+*/
+
+#ifdef debug
+void DBprintStatus(uint8_t ChgIdx) {
+    DebugPrint( "--------- Debug-Ausgabe Stati ---------\n\r");
+    DebugPrint( "\n\r");
+    DebugPrint( "S Nr | Addr |  Stat  |  HW  | BLST | xxxx | xxxx | xxxx \n\r");
+    for ( uint8_t i = 0; i < sizeof(arU8_WeicheState); i++ ) {
+        if ( (arU8_WeicheAddr[i] != 0) || (arU8_BlockIdx[i] != 0) ) {
+            DebugPrint( "%4d |%5d | %2d -%2d | %4s | %4s | %4d | %4d | %3s\n\r" , i,
+                                                                 arU8_WeicheAddr[i],
+                                                                 arU8_BlockIdx[i], arU8_WeicheState[i] ,
+                                                                 ( arU8_WeicheState[i] & POSMSK ) == 0 ? "off":" on",
+                                                                 ( arU8_WeicheState[i] & BLKMSK ) == 0 ? "":"blkd",
+                                                                 0,
+                                                                 0,
+                                                                 i == ChgIdx ? "<--":"");
+            
+        }
+    }    
+}
+#else
+void DBprintStatus(void) {
+    
+}
+#endif

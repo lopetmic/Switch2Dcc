@@ -30,11 +30,11 @@ const uint8_t U8_Version_Switch2DCC = 4;   // basiert auf Switch2DCC Veriosn 3 v
     Negative Zahlen Geben die angegebene Adresse frei
     - Umsetzung der Adresseb auf Indizes zum einfacheren Zugriff
 */
-/*                                    S1          S2      S3  S4  S5      S6   S7  S8  S9 S10                     S11 S12 S13 S14 S15             S16 S17 S18 S19 S20                     S21 S22 S23 S24 S25     */
-const uint8_t arU8_WeicheColsP[]   = { 4,  4,  4,  4,  4,  4,  4,  4,  4,  5,   5,  5,  5,  5,  5,  5,  5,  5,  5,  6,  6,  6,  6,  6,  6,  6,  6,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  8,  8,  8,  8,  8,  8 };
-const uint8_t arU8_WeicheRowsP[]   = { 9,  9,  9, 10, 10, 11, 12, 14, 15,  9,  10, 11, 12, 14, 15, 14, 15, 14, 15,  9, 10, 11, 12, 14, 15, 14, 15,  9, 10, 11, 12, 14, 15, 14, 15, 14, 15,  9, 10, 11, 12, 14, 15 };
-const uint8_t arU8_WeicheAddr[]    = { 1,  9, 17,  0,  0,  3,  4,  5,  5,  7,  10, 18,  0,  6,  6, 11, 11, 19, 19, 25, 26,  0,  0, 12, 12, 20, 20,  2, 14, 22,  0,  8,  8, 13, 13, 21, 21,  0,  0,  0,  0, 27, 27 };
-const uint8_t arU8_WeicheDir[]     = { 1,  1,  1,  1,  1,  1,  1,  7,  3,  1,   1,  1,  1,  7,  3,  7,  3,  7,  3,  1,  1,  1,  1,  7,  3,  7,  3,  1,  1,  1,  1,  7,  3,  7,  3,  7,  3,  1,  1,  1,  1,  7,  3 };
+/*                                    S1          S2      S3  S4  S5      S6   S7  S8  S9 S10                     S11 S12 S13 S14 S15             S16 S17     S18 S19 S20                     S21 S22 S23 S24 S25     */
+const uint8_t arU8_WeicheColsP[]   = { 4,  4,  4,  4,  4,  4,  4,  4,  4,  5,   5,  5,  5,  5,  5,  5,  5,  5,  5,  6,  6,  6,  6,  6,  6,  6,  6,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  8,  8,  8,  8,  8,  8 };
+const uint8_t arU8_WeicheRowsP[]   = { 9,  9,  9, 10, 10, 11, 12, 14, 15,  9,  10, 11, 12, 14, 15, 14, 15, 14, 15,  9, 10, 11, 12, 14, 15, 14, 15,  9, 10, 10, 11, 12, 14, 15, 14, 15, 14, 15,  9, 10, 11, 12, 14, 15 };
+const uint8_t arU8_WeicheAddr[]    = { 1,  9, 17,  0,  0,  3,  4,  5,  5,  7,  10, 18,  0,  6,  6, 11, 11, 19, 19, 26, 25,  0,  0, 12, 12, 20, 20,  2, 14, 28, 22,  0,  8,  8, 13, 13, 21, 21,  0,  0,  0,  0, 27, 27 };
+const uint8_t arU8_WeicheDir[]     = { 1,  1,  1,  1,  1,  1,  1,  7,  3,  1,   1,  1,  1,  7,  3,  7,  3,  7,  3,  0,  0,  1,  1,  7,  3,  7,  3,  1,  1,  1,  1,  1,  7,  3,  7,  3,  7,  3,  1,  1,  1,  1,  3,  7 };
 #define DIRMSK  1
 #define OFFMSK  2
 #define COILMSK 4
@@ -102,7 +102,7 @@ uint8_t arU8_BlockIdx[sizeof(arI16_BlockAddr) / 2];
      4 25 Weiche Feldbahn SBF 1
      4 26 Weiche Feldbahn SBF 2
      4 27 Fahrstrom Feldbahn SBF
-     4 28 frei
+     4 28 Licht 2
      4 29 frei
      4 30 frei
      4 31 frei
@@ -304,7 +304,7 @@ void loop() {
   }
   //DebugPrint( "----------\n\r");
 
-  delay(5);
+  delay(1);
 }
 //###################### Ende Loop Arduino     ##############################
 //###########################################################################

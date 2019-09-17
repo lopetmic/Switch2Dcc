@@ -30,11 +30,11 @@ const uint8_t U8_Version_Switch2DCC = 4;   // basiert auf Switch2DCC Veriosn 3 v
     Negative Zahlen Geben die angegebene Adresse frei
     - Umsetzung der Adresseb auf Indizes zum einfacheren Zugriff
 */
-/*                                    S1          S2      S3  S4  S5      S6   S7  S8  S9 S10                     S11 S12 S13 S14 S15             S16 S17     S18 S19 S20                     S21 S22 S23 S24 S25     */
+/*                                    S1          S2      S3  S4  S5      S6   S7  S8  S9 S10                     S11 S12 S13 S14 S15             S16 S17 S18     S19 S20                     S21 S22 S23     S25     */
 const uint8_t arU8_WeicheColsP[]   = { 4,  4,  4,  4,  4,  4,  4,  4,  4,  5,   5,  5,  5,  5,  5,  5,  5,  5,  5,  6,  6,  6,  6,  6,  6,  6,  6,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  8,  8,  8,  8,  8,  8 };
-const uint8_t arU8_WeicheRowsP[]   = { 9,  9,  9, 10, 10, 11, 12, 14, 15,  9,  10, 11, 12, 14, 15, 14, 15, 14, 15,  9, 10, 11, 12, 14, 15, 14, 15,  9, 10, 10, 11, 12, 14, 15, 14, 15, 14, 15,  9, 10, 11, 12, 14, 15 };
-const uint8_t arU8_WeicheAddr[]    = { 1,  9, 17,  0,  0,  3,  4,  5,  5,  7,  10, 18,  0,  6,  6, 11, 11, 19, 19, 26, 25,  0,  0, 12, 12, 20, 20,  2, 14, 28, 22,  0,  8,  8, 13, 13, 21, 21,  0,  0,  0,  0, 27, 27 };
-const uint8_t arU8_WeicheDir[]     = { 1,  1,  1,  1,  1,  1,  1,  7,  3,  1,   1,  1,  1,  7,  3,  7,  3,  7,  3,  0,  0,  1,  1,  7,  3,  7,  3,  1,  1,  1,  1,  1,  7,  3,  7,  3,  7,  3,  1,  1,  1,  1,  3,  7 };
+const uint8_t arU8_WeicheRowsP[]   = { 9,  9,  9, 10, 10, 11, 12, 14, 15,  9,  10, 11, 12, 14, 15, 14, 15, 14, 15,  9, 10, 11, 12, 14, 15, 14, 15,  9, 10, 11, 11, 12, 14, 15, 14, 15, 14, 15,  9, 10, 11, 12, 14, 15 };
+const uint8_t arU8_WeicheAddr[]    = { 1,  9, 17,  0,  0,  3,  4,  5,  5,  7,  10, 18,  0,  6,  6, 11, 11, 19, 19, 26, 25,  0,  0, 12, 12, 20, 20,  2, 14, 22, 28,  0,  8,  8, 13, 13, 21, 21,  0,  0, 16, 16, 27, 27 };
+const uint8_t arU8_WeicheDir[]     = { 1,  1,  1,  1,  1,  1,  1,  7,  3,  1,   1,  1,  1,  7,  3,  7,  3,  7,  3,  0,  0,  1,  1,  7,  3,  7,  3,  1,  1,  1,  1,  1,  7,  3,  7,  3,  7,  3,  1,  1,  7,  3,  3,  7 };
 #define DIRMSK  1
 #define OFFMSK  2
 #define COILMSK 4
@@ -140,7 +140,7 @@ uint8_t arU8_DCC_BufState[DCC_BUF_SIZE];   // aktueller Pufferstatus
 #define BUF_SENT  4             // Puffer wurde komplett auf dcc ausgegeben
 uint8_t arU8_DCC_BufDataLen[DCC_BUF_SIZE]; // atuelle Datenlänge (incl. Prüfsumme)
 uint8_t arU8_DCC_BufDataRep[DCC_BUF_SIZE]; // Wiederholungen bei der Ausgabe
-#define MAX_REPEATS 2
+#define MAX_REPEATS 3
 //#define ROCOADDR 1             // auskommentieren für Standard NMRA Adressing
 
 // Variablen für die ISR-Routine zur DCC-Ausgabe
@@ -151,7 +151,7 @@ uint8_t arU8_DCC_PacketIdle[] = { 0xff, 0x00, 0xff };
 
 // für debugging ------------------------------------------------------------
 // Debug-Ports
-#define debug
+//#define debug
 #include "debugports.cpp"
 // #define debug_block
 
@@ -215,10 +215,16 @@ void setup() {
     DebugPrint( "%d, ", arU8_WeicheState[i] );
   }
 
+  // init Track Off light
   pinMode( 13, OUTPUT );
   digitalWrite(  13, LOW );
+  // init DCC timer
   InitTimer2();
+  // init DCC busy light
+  pinMode( 2, OUTPUT );
+  digitalWrite(  2, LOW );
 
+  // debugports
   MODE_TP1;
   MODE_TP2;
   MODE_TP4;
@@ -258,7 +264,9 @@ void loop() {
   //DebugPrint( "----- reading finished -----\n\r");
 
   // für geänderte Weichen jeweils ein Telegramm erzeugen
-  for (uint8_t i = 0; i < sizeof( arU8_WeicheState ); i++ ) {
+  uint8_t i = 0;
+  uint8_t flgBufAvl = 1;
+  while (i < sizeof( arU8_WeicheState ) && flgBufAvl > 0) {
     uint8_t U8_WeicheCoil;  // anzusteuernde Spule (entspricht der Weichenposition)
     uint8_t U8_WeicheAct;   // aktuelle Aktivität einer Weichenspule (angesteuert oder nicht);
     // Wenn Telegrammbit in arU8_WeicheState gesetzt, dann
@@ -281,10 +289,13 @@ void loop() {
       if ( mtCreateTelegram( arU8_WeicheAddr[i], U8_WeicheCoil, U8_WeicheAct ) >= 0 ) {
         // Telegrammbit löschen
         arU8_WeicheState[i] &= ~( TELMSK );
+      } else {
+        flgBufAvl = 0;
       }
     }
+    i++;
   }
-  //DebugPrint( "----------\n\r");
+  DebugPrint( "----- telegrams created -----\n\r");
 
   // Telegramm Wiederholungen verwalten
   // Für alle Puffer
@@ -292,19 +303,21 @@ void loop() {
     // wenn der Puffer bereits gesendet wurde, dann
     if ( arU8_DCC_BufState[i] == BUF_SENT ) {
       // Puffer wiederholen oder freigeben
-      DebugPrint( "Buffer[%d] gesendet, RepCnt=%d\n\r", i , arU8_DCC_BufDataRep[i] );
       if ( arU8_DCC_BufDataRep[i] > 1 ) {
         // Telegramm erneut senden
+        DebugPrint( "Buffer[%d] gesendet, noch %d mal senden.\n\r", i , arU8_DCC_BufDataRep[i] );
         arU8_DCC_BufDataRep[i]--;
         arU8_DCC_BufState[i] = BUF_WAIT;
       } else {
+        DebugPrint( "Buffer[%d] gesendet, fertig.\n\r", i );
         arU8_DCC_BufState[i] = BUF_IDLE;
       }
     }
   }
-  //DebugPrint( "----------\n\r");
+  DebugPrint( "----- buffers handled -----\n\r");
 
-  delay(1);
+  // S17 augeben
+  digitalWrite(  13, !arU8_WeicheState[28] & POSMSK );
 }
 //###################### Ende Loop Arduino     ##############################
 //###########################################################################
@@ -553,14 +566,14 @@ ISR ( TIMER2_COMPB_vect) {
           U8_ByteCount = arU8_DCC_BufDataLen[U8_DCC_BufSndIdx];
           ptrU8_PacketBuf = &arU8_DCC_Buf[U8_DCC_BufSndIdx][0];
           arU8_DCC_BufState[U8_DCC_BufSndIdx] = BUF_OUT;
-          digitalWrite(  13, LOW );
+          digitalWrite(  2, HIGH );
         } else {
           // kein Telegramm auszugeben, Idle-Telegramm senden
           U8_DCC_State = DCC_IDLE;
           U8_DCC_BufSndIdx = -1;
           ptrU8_PacketBuf = arU8_DCC_PacketIdle;
           U8_ByteCount = sizeof(arU8_DCC_PacketIdle);
-          digitalWrite(  13, HIGH );
+          digitalWrite(  2, LOW );
         }
       }
       CLR_TP1;
@@ -628,7 +641,7 @@ void DBprintStatus(uint8_t ChgIdx) {
     }    
 }
 #else
-void DBprintStatus(void) {
+void DBprintStatus(uint8_t ChgIdx) {
     
 }
 #endif

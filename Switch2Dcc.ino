@@ -30,15 +30,15 @@ const uint8_t U8_Version_Switch2DCC = 4;   // basiert auf Switch2DCC Veriosn 3 v
     Negative Zahlen Geben die angegebene Adresse frei
     - Umsetzung der Adresseb auf Indizes zum einfacheren Zugriff
 */
-/*                                    S1          S2      S3  S4  S5      S6   S7  S8  S9 S10                     S11 S12 S13 S14 S15             S16 S17 S18     S19 S20                     S21 S22 S23     S25     */
-const uint8_t arU8_WeicheColsP[]   = { 4,  4,  4,  4,  4,  4,  4,  4,  4,  5,   5,  5,  5,  5,  5,  5,  5,  5,  5,  6,  6,  6,  6,  6,  6,  6,  6,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  8,  8,  8,  8,  8,  8 };
-const uint8_t arU8_WeicheRowsP[]   = { 9,  9,  9, 10, 10, 11, 12, 14, 15,  9,  10, 11, 12, 14, 15, 14, 15, 14, 15,  9, 10, 11, 12, 14, 15, 14, 15,  9, 10, 11, 11, 12, 14, 15, 14, 15, 14, 15,  9, 10, 11, 12, 14, 15 };
-const uint8_t arU8_WeicheAddr[]    = { 1,  9, 17,  0,  0,  3,  4,  5,  5,  7,  10, 18,  0,  6,  6, 11, 11, 19, 19, 26, 25,  0,  0, 12, 12, 20, 20,  2, 14, 22, 28,  0,  8,  8, 13, 13, 21, 21,  0,  0, 16, 16, 27, 27 };
-const uint8_t arU8_WeicheDir[]     = { 1,  1,  1,  1,  1,  1,  1,  7,  3,  1,   1,  1,  1,  7,  3,  7,  3,  7,  3,  0,  0,  1,  1,  7,  3,  7,  3,  1,  1,  1,  1,  1,  7,  3,  7,  3,  7,  3,  1,  1,  7,  3,  3,  7 };
+/*                                    S1          S2      S3  S4  S5      S6  S7  S8  S9 S10                     S11 S12 S13 S14 S15             S16 S17     S18     S19 S20                     S21 S22 S23     S25     */
+const uint8_t arU8_WeicheColsP[]   = { 4,  4,  4,  4,  4,  4,  4,  4,  4,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  6,  6,  6,  6,  6,  6,  6,  6,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  8,  8,  8,  8,  8,  8 };
+const uint8_t arU8_WeicheRowsP[]   = { 9,  9,  9, 10, 10, 11, 12, 14, 15,  9, 10, 11, 12, 14, 15, 14, 15, 14, 15,  9, 10, 11, 12, 14, 15, 14, 15,  9, 10, 10, 11, 11, 12, 14, 15, 14, 15, 14, 15,  9, 10, 11, 12, 14, 15 };
+const uint8_t arU8_WeicheAddr[]    = { 1,  9, 17,  0,  0,  3,  4,  5,  5,  7, 10, 18,  0,  6,  6, 11, 11, 19, 19, 26, 25,  0,  0, 12, 12, 20, 20,  2, 14, 24, 22, 28,  0,  8,  8, 13, 13, 21, 21,  0,  0, 16, 16, 27, 27 };
+const uint8_t arU8_WeicheDir[]     = { 1,  1,  1,  1,  1,  1,  1,  7,  3,  1,  1,  1,  1,  7,  3,  7,  3,  7,  3,  0,  0,  1,  1,  7,  3,  7,  3,  1,  1,  1,  1,  1,  1,  7,  3,  7,  3,  7,  3,  1,  1,  3,  7,  3,  7 };
 #define DIRMSK  1
 #define OFFMSK  2
 #define COILMSK 4
-const int16_t arI16_BlockAddr[]    = { 0,  0,  0, -3, -4, -4,  0,  0,  0,  0,   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0 };
+const int16_t arI16_BlockAddr[]    = { 0,  0,  0, -3, -4, -4,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0 };
 uint8_t arU8_BlockIdx[sizeof(arI16_BlockAddr) / 2];
 
 /* Doku für Schwarzenberg:
@@ -62,7 +62,7 @@ uint8_t arU8_BlockIdx[sizeof(arI16_BlockAddr) / 2];
    S15:6/14 Fahrstrom Feldbahn Strecke Mitte (Spule 1) -> auf 2 Modulen!
    S15:6/15 Fahrstrom Feldbahn Strecke Mitte (Spule 2) -> auf 2 Modulen!
    S16:7/9  Licht 1
-   S17:7/10 Licht 2
+   S17:7/10 Licht 2 -> TrackOff
    S18:7/11 Licht 3
    S19:7/12 -
    S20:7/14 Fahrstrom Feldbahn Strecke vorne (Spule 1) -> auf 3 Modulen!
@@ -88,7 +88,7 @@ uint8_t arU8_BlockIdx[sizeof(arI16_BlockAddr) / 2];
      2 11 Fahrstrom Feldbahn Strecke hinten
      2 12 Fahrstrom Feldbahn Strecke Mitte
      2 13 Fahrstrom Feldbahn Strecke vorne
-     2 14 Licht 2
+     2 14 TrackOff
      2 15 frei
      2 16 frei
      3 17 2L/3L
@@ -98,7 +98,7 @@ uint8_t arU8_BlockIdx[sizeof(arI16_BlockAddr) / 2];
      3 21 Fahrstrom Feldbahn Strecke vorne
      3 22 Licht 3
      3 23 frei
-     3 24 frei
+     3 24 TrackOff
      4 25 Weiche Feldbahn SBF 1
      4 26 Weiche Feldbahn SBF 2
      4 27 Fahrstrom Feldbahn SBF
@@ -151,9 +151,9 @@ uint8_t arU8_DCC_PacketIdle[] = { 0xff, 0x00, 0xff };
 
 // für debugging ------------------------------------------------------------
 // Debug-Ports
-//#define debug
+#define debug
 #include "debugports.cpp"
-// #define debug_block
+//#define debug_block
 
 //###################### Ende der Definitionen ##############################
 //###########################################################################
@@ -295,7 +295,7 @@ void loop() {
     }
     i++;
   }
-  DebugPrint( "----- telegrams created -----\n\r");
+  //DebugPrint( "----- telegrams created -----\n\r");
 
   // Telegramm Wiederholungen verwalten
   // Für alle Puffer
@@ -314,7 +314,7 @@ void loop() {
       }
     }
   }
-  DebugPrint( "----- buffers handled -----\n\r");
+  //DebugPrint( "----- buffers handled -----\n\r");
 
   // S17 augeben
   digitalWrite(  13, !arU8_WeicheState[28] & POSMSK );
